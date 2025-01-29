@@ -551,6 +551,7 @@ func Provider() *schema.Provider {
 			"fortios_firewall_networkservicedynamic":                     resourceFirewallNetworkServiceDynamic(),
 			"fortios_firewall_ondemandsniffer":                           resourceFirewallOnDemandSniffer(),
 			"fortios_firewall_policy":                                    resourceFirewallPolicy(),
+			"fortios_firewall_policy_list":                               resourceFirewallPolicyList(),
 			"fortios_firewall_policy46":                                  resourceFirewallPolicy46(),
 			"fortios_firewall_policy6":                                   resourceFirewallPolicy6(),
 			"fortios_firewall_policy64":                                  resourceFirewallPolicy64(),

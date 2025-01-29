@@ -112,3 +112,36 @@ func read(c *FortiSDKClient, method string, path string, bcomplex bool, vdompara
 
 	return
 }
+
+func readAll(c *FortiSDKClient, method string, path string) (mapTmp []interface{}, err error) {
+	req := c.NewRequest(method, path, nil, nil)
+	err = req.Send3("")
+	if err != nil || req.HTTPResponse == nil {
+		err = fmt.Errorf("Cannot send request: %v", err)
+		return
+	}
+
+	body, err := ioutil.ReadAll(req.HTTPResponse.Body)
+	req.HTTPResponse.Body.Close() //#
+
+	if err != nil || body == nil {
+		err = fmt.Errorf("Cannot get response body: %v", err)
+		return
+	}
+	log.Printf("FOS-fortios reading response: %s", string(body))
+
+	var result map[string]interface{}
+	json.Unmarshal([]byte(string(body)), &result)
+
+	if fortiAPIHttpStatus404Checking(result) == true {
+		mapTmp = nil
+		return
+	}
+
+	err = fortiAPIErrorFormat(result, string(body))
+	if err != nil {
+		return nil, err
+	}
+
+	return result["results"].([]interface{}), nil
+}
