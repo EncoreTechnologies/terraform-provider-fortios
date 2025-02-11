@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"log"
+	"context"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
@@ -40,9 +42,7 @@ func resourceFirewallPolicyList() *schema.Resource {
 						"policyid": &schema.Schema{
 							Type:         schema.TypeInt,
 							ValidateFunc: validation.IntBetween(1, 2147482999),
-							//ForceNew:     true,
-							Optional: true,
-							Computed: true,
+							Required: true,
 						},
 						"name": &schema.Schema{
 							Type:         schema.TypeString,
@@ -1413,6 +1413,7 @@ func resourceFirewallPolicyList() *schema.Resource {
 				Description: "When deleting this resource, by default, it doesn't delete anything, just simply removes from state.  Setting this will actually delete all policies on the firewall",
 			},
 		},
+		CustomizeDiff: firewallPolicyCustomDiff,
 	}
 }
 
@@ -1489,17 +1490,21 @@ func resourceFirewallPolicyListUpdate(d *schema.ResourceData, m interface{}) err
 			for _, r := range results {
 				result := r.(map[string]interface{})
 
-				if policy["policyid"].(int) == int(result["policyid"].(float64)) {
-					found = true
-				}
+				if policyid, ok := policy["policyid"]; ok {
+					if policyid.(int) == int(result["policyid"].(float64)) {
+						found = true
+					}
+				} 
 			}
 
 			if !found {
 				flattenPolicyProperties(policy)
-				
-				if _, err = c.CreateFirewallPolicy(&policy, ""); err != nil {
+				o, err := c.CreateFirewallPolicy(&policy, "")
+				if err != nil {
 					return fmt.Errorf("error updating firewall policy resource: %v", err)
 				}
+
+				policy["policyid"] = int(o["mkey"].(float64))
 			}
 		}
 	}
@@ -1585,6 +1590,58 @@ func resourceFirewallPolicyListRead(d *schema.ResourceData, m interface{}) error
 
 	d.Set("policy", results)
 	return nil
+}
+
+func firewallPolicyCustomDiff(ctx context.Context, d *schema.ResourceDiff, m interface{}) error {
+	log.Printf("policy in custom diff: %v", d.Get("policy"))
+
+	if d.HasChange("policy") {
+        old, new := d.GetChange("policy")
+
+        oldItems := old.([]interface{})
+        newItems := new.([]interface{})
+
+		if len(newItems) > len(oldItems) {
+			c := m.(*FortiClient).Client
+			c.Retries = 1
+
+			policyIDMap := make(map[int]struct{})
+
+			for _, n := range newItems {
+				newItem := n.(map[string]interface{})
+				found := false
+				
+				for _, o := range oldItems {
+					oldItem := o.(map[string]interface{})
+
+					if oldItem["policyid"].(int) == newItem["policyid"].(int){
+						found = true
+
+						if _, ok := policyIDMap[oldItem["policyid"].(int)]; ok {
+							return fmt.Errorf("policyid '%d' duplicated locally", oldItem["policyid"].(int))
+						} else{
+							policyIDMap[oldItem["policyid"].(int)] = struct{}{}
+						}
+
+						break
+					}
+				}
+
+				if !found {
+					o, err := c.ReadFirewallPolicy(strconv.Itoa(newItem["policyid"].(int)), "")
+					if err != nil {
+						return fmt.Errorf("error querying for policy id '%d'", newItem["policyid"].(int))
+					}
+
+					if o != nil {
+						return fmt.Errorf("policyid '%d' already exists remotely", newItem["policyid"].(int))
+					}
+				}
+			}
+		}
+    }
+
+    return nil
 }
 
 func flattenPolicyProperties(policy map[string]interface{}) {
