@@ -1470,13 +1470,13 @@ func resourceFirewallPolicyListUpdate(d *schema.ResourceData, m interface{}) err
 			for _, p := range policies {
 				policy := p.(map[string]interface{})
 
-				if policy["policyid"] == result["policyid"] {
+				if policy["policyid"].(int) == int(result["policyid"].(float64)) {
 					found = true
 				}
 			}
 
 			if !found {
-				if err = c.DeleteFirewallPolicy(strconv.Itoa(result["policyid"].(int)), ""); err != nil {
+				if err = c.DeleteFirewallPolicy(strconv.Itoa(int(result["policyid"].(float64))), ""); err != nil {
 					return fmt.Errorf("error deleting firewall policy resource: %v", err)
 				}
 			}
@@ -1489,12 +1489,14 @@ func resourceFirewallPolicyListUpdate(d *schema.ResourceData, m interface{}) err
 			for _, r := range results {
 				result := r.(map[string]interface{})
 
-				if policy["policyid"] == result["policyid"] {
+				if policy["policyid"].(int) == int(result["policyid"].(float64)) {
 					found = true
 				}
 			}
 
 			if !found {
+				flattenPolicyProperties(policy)
+				
 				if _, err = c.CreateFirewallPolicy(&policy, ""); err != nil {
 					return fmt.Errorf("error updating firewall policy resource: %v", err)
 				}
@@ -1549,10 +1551,10 @@ func resourceFirewallPolicyListDelete(d *schema.ResourceData, m interface{}) err
 			return fmt.Errorf("error reading FirewallPolicy resource: %v", err)
 		}
 
-		for _, result := range results {
-			r := result.(map[string]interface{})
+		for _, r := range results {
+			result := r.(map[string]interface{})
 
-			err := c.DeleteFirewallPolicy(strconv.Itoa(r["policyid"].(int)), "")
+			err := c.DeleteFirewallPolicy(strconv.Itoa(int(result["policyid"].(float64))), "")
 			if err != nil {
 				return fmt.Errorf("Error deleting FirewallPolicy resource: %v", err)
 			}
