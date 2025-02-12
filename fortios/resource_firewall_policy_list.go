@@ -1,11 +1,10 @@
 package fortios
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
-	"log"
-	"context"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
@@ -42,7 +41,7 @@ func resourceFirewallPolicyList() *schema.Resource {
 						"policyid": &schema.Schema{
 							Type:         schema.TypeInt,
 							ValidateFunc: validation.IntBetween(1, 2147482999),
-							Required: true,
+							Required:     true,
 						},
 						"name": &schema.Schema{
 							Type:         schema.TypeString,
@@ -1463,6 +1462,11 @@ func resourceFirewallPolicyListUpdate(d *schema.ResourceData, m interface{}) err
 
 	policies := d.Get("policy").([]interface{})
 
+	// If number of results is larger than policies passed, then loop through and delete
+	// the policies that have been deleted
+	//
+	// Else if number of policies is larger than results, then loop through and create the
+	// policies that are new
 	if len(results) > len(policies) {
 		for _, r := range results {
 			result := r.(map[string]interface{})
@@ -1494,7 +1498,7 @@ func resourceFirewallPolicyListUpdate(d *schema.ResourceData, m interface{}) err
 					if policyid.(int) == int(result["policyid"].(float64)) {
 						found = true
 					}
-				} 
+				}
 			}
 
 			if !found {
@@ -1509,6 +1513,8 @@ func resourceFirewallPolicyListUpdate(d *schema.ResourceData, m interface{}) err
 		}
 	}
 
+	// Now that policies are created/deleted, loop through and move any policies into place
+	// that are out of order
 	for pIdx, p := range policies {
 		policy := p.(map[string]interface{})
 
@@ -1592,58 +1598,42 @@ func resourceFirewallPolicyListRead(d *schema.ResourceData, m interface{}) error
 	return nil
 }
 
+// firewallPolicyCustomDiff checks if there is any duplicate policy ids and returns error if there is
 func firewallPolicyCustomDiff(ctx context.Context, d *schema.ResourceDiff, m interface{}) error {
-	log.Printf("policy in custom diff: %v", d.Get("policy"))
-
 	if d.HasChange("policy") {
-        old, new := d.GetChange("policy")
+		old, new := d.GetChange("policy")
 
-        oldItems := old.([]interface{})
-        newItems := new.([]interface{})
+		oldItems := old.([]interface{})
+		newItems := new.([]interface{})
 
 		if len(newItems) > len(oldItems) {
-			c := m.(*FortiClient).Client
-			c.Retries = 1
-
 			policyIDMap := make(map[int]struct{})
 
 			for _, n := range newItems {
 				newItem := n.(map[string]interface{})
-				found := false
-				
+
 				for _, o := range oldItems {
 					oldItem := o.(map[string]interface{})
 
-					if oldItem["policyid"].(int) == newItem["policyid"].(int){
-						found = true
-
+					if oldItem["policyid"].(int) == newItem["policyid"].(int) {
 						if _, ok := policyIDMap[oldItem["policyid"].(int)]; ok {
 							return fmt.Errorf("policyid '%d' duplicated locally", oldItem["policyid"].(int))
-						} else{
+						} else {
 							policyIDMap[oldItem["policyid"].(int)] = struct{}{}
 						}
 
 						break
 					}
 				}
-
-				if !found {
-					o, err := c.ReadFirewallPolicy(strconv.Itoa(newItem["policyid"].(int)), "")
-					if err != nil {
-						return fmt.Errorf("error querying for policy id '%d'", newItem["policyid"].(int))
-					}
-
-					if o != nil {
-						return fmt.Errorf("policyid '%d' already exists remotely", newItem["policyid"].(int))
-					}
-				}
 			}
 		}
-    }
+	}
 
-    return nil
+	return nil
 }
 
+// flattenPolicyProperties takes policy map and searches for *schema.Set type
+// and converts it to list of interfaces so it can be json marshaled
 func flattenPolicyProperties(policy map[string]interface{}) {
 	for k, v := range policy {
 		switch val := v.(type) {
@@ -1653,6 +1643,8 @@ func flattenPolicyProperties(policy map[string]interface{}) {
 	}
 }
 
+// updatePolicyResults takes in list of interfaces and converts to map along with
+// converting the keys to use "_" instead of "-"
 func updatePolicyResults(results []interface{}) {
 	for _, r := range results {
 		result := r.(map[string]interface{})
