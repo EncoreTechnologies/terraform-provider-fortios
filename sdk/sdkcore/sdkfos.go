@@ -6088,7 +6088,6 @@ func (c *FortiSDKClient) ReadFirewallOnDemandSniffer(mkey string, vdomparam stri
 // Returns error for service API and SDK errors.
 // See the firewall - policy chapter in the FortiOS Handbook - CLI Reference.
 func (c *FortiSDKClient) CreateFirewallPolicy(params *map[string]interface{}, vdomparam string) (output map[string]interface{}, err error) {
-
 	HTTPMethod := "POST"
 	path := "/api/v2/cmdb/firewall/policy"
 	output = make(map[string]interface{})
@@ -6134,6 +6133,16 @@ func (c *FortiSDKClient) ReadFirewallPolicy(mkey string, vdomparam string) (mapT
 	path += "/" + escapeURLString(mkey)
 
 	mapTmp, err = read(c, HTTPMethod, path, false, vdomparam)
+	return
+}
+
+// ReadFirewallPolicyList API operation for FortiOS gets all polices
+// Returns error for service API and SDK errors.
+func (c *FortiSDKClient) ReadFirewallPolicyList() (mapTmp []interface{}, err error) {
+	HTTPMethod := "GET"
+	path := "/api/v2/cmdb/firewall/policy"
+
+	mapTmp, err = readAll(c, HTTPMethod, path)
 	return
 }
 
